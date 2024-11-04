@@ -9,6 +9,7 @@
 #pragma once
 
 #include <JuceHeader.h>
+#include "Oscillator.hpp"
 
 //==============================================================================
 /**
@@ -53,14 +54,17 @@ public:
     void getStateInformation (juce::MemoryBlock& destData) override;
     void setStateInformation (const void* data, int sizeInBytes) override;
 
-
-    juce::AudioProcessorValueTreeState parameters;
+    static juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout();
+    juce::AudioProcessorValueTreeState apvts{ *this, nullptr, "Parameters", createParameterLayout() };
 
 private:
    // float rate = 0.5f; //Modulation rate in Hz
    // float depth = 0.5f; //Modulation depth (0.0 to 1.0)
 
     juce::dsp::Oscillator<float> osc { [](float x) {return std::sin(x); } };
+    OscillatorProcessor myOsc;
+
+
 
     // return std::sin (x); //Sine Wave
     // return x / MathConstants<float>::pi // Saw Wave

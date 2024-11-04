@@ -8,6 +8,7 @@
 
 #include "PluginProcessor.h"
 #include "PluginEditor.h"
+#include "Oscillator.hpp"
 
 
 //==============================================================================
@@ -20,11 +21,7 @@ BasicOscillatorAudioProcessor::BasicOscillatorAudioProcessor()
                       #endif
                        .withOutput ("Output", juce::AudioChannelSet::stereo(), true)
                      #endif
-                       ),
-    parameters(*this, nullptr, "PARAMETERS", {
-std::make_unique<juce::AudioParameterFloat>("rate", "Rate", 0.1f, 10.0f, 5.0f),  // Rate: min 0.1Hz, max 10Hz, default 5Hz
-std::make_unique<juce::AudioParameterFloat>("depth", "Depth", 0.0f, 1.0f, 0.5f) // Depth: min 0.0, max 1.0, default 0.5
-        })
+                       )
 #endif
 {
 }
@@ -106,7 +103,7 @@ void BasicOscillatorAudioProcessor::prepareToPlay (double sampleRate, int sample
     spec.maximumBlockSize = (juce::uint32)samplesPerBlock;
     spec.numChannels = getTotalNumInputChannels();
 
-    osc.prepare(spec);
+    myOsc.prepare(spec);
 }
 
 void BasicOscillatorAudioProcessor::releaseResources()
@@ -156,22 +153,114 @@ void BasicOscillatorAudioProcessor::processBlock (juce::AudioBuffer<float>& buff
     for (auto i = totalNumInputChannels; i < totalNumOutputChannels; ++i)
         buffer.clear (i, 0, buffer.getNumSamples());
     
-    float rate = *parameters.getRawParameterValue("rate");
-    float depth = *parameters.getRawParameterValue("depth");
 
-    osc.setFrequency(rate);
+    auto sync = apvts.getRawParameterValue("InSync")->load();
+    auto noteIndex = static_cast<int>(apvts.getRawParameterValue("NoteVal")->load());
+    auto feelIndex = static_cast<int>(apvts.getRawParameterValue("Feel")->load());
 
-    for (int channel = 0; channel < totalNumInputChannels; ++channel)
+
+    if (sync == true)
     {
-        auto* channelData = buffer.getWritePointer(channel);
+        double bpm;
+        auto tmp_bpm = getPlayHead()->getPosition()->getBpm();
 
-        for (int sample = 0; sample < buffer.getNumSamples(); ++sample)
+
+        if (tmp_bpm.hasValue())
         {
-            float modulation = 1.0f - depth * osc.processSample(0.0f);
-            channelData[sample] *= modulation;
+            bpm = *tmp_bpm;
+            //DBG("Got BPM");
+        }
+        else
+        {
+            //DBG("Host BPM could not be retrieved");
+            bpm = 120.0;
+        }
+
+        myOsc.setBpm(bpm);
+
+        auto rate = myOsc.setModulator(noteIndex, feelIndex, true);
+        auto depth = apvts.getRawParameterValue("depth")->load();
+
+
+        myOsc.setFrequency(rate);
+        
+        auto waveIndex = static_cast<int>(apvts.getRawParameterValue("OscShape")->load());
+
+        if (waveIndex == SINE)
+        {
+            myOsc.setWaveForm(SINE);
+        }
+        else if (waveIndex == SQUARE)
+        {
+            myOsc.setWaveForm(SQUARE);
+        }
+        else if (waveIndex == TRIANGLE)
+        {
+            myOsc.setWaveForm(TRIANGLE);
+        }
+        else
+        {
+            myOsc.setWaveForm(SAWTOOTH);
+        }
+
+
+
+        for (int channel = 0; channel < totalNumInputChannels; ++channel)
+        {
+            auto* channelData = buffer.getWritePointer(channel);
+
+            for (int sample = 0; sample < buffer.getNumSamples(); ++sample)
+            {
+                float modulation = 1.0f - depth * myOsc.processSample();
+                channelData[sample] *= modulation;
+            }
+        }
+
+
+    }
+    else
+    {
+        auto rate = apvts.getRawParameterValue("rate")->load();
+        auto depth = apvts.getRawParameterValue("depth")->load();
+
+
+        myOsc.setFrequency(rate);
+
+        auto waveIndex = static_cast<int>(apvts.getRawParameterValue("OscShape")->load());
+
+        if (waveIndex == SINE)
+        {
+            myOsc.setWaveForm(SINE);
+        }
+        else if (waveIndex == SQUARE)
+        {
+            myOsc.setWaveForm(SQUARE);
+        }
+        else if (waveIndex == TRIANGLE)
+        {
+            myOsc.setWaveForm(TRIANGLE);
+        }
+        else
+        {
+            myOsc.setWaveForm(SAWTOOTH);
+        }
+
+    
+
+        for (int channel = 0; channel < totalNumInputChannels; ++channel)
+        {
+            auto* channelData = buffer.getWritePointer(channel);
+
+            for (int sample = 0; sample < buffer.getNumSamples(); ++sample)
+            {
+                float modulation = 1.0f - depth * myOsc.processSample();
+                channelData[sample] *= modulation;
+            }   
         }
     }
+
     
+  
 } 
 
 //==============================================================================
@@ -197,6 +286,61 @@ void BasicOscillatorAudioProcessor::setStateInformation (const void* data, int s
 {
     // You should use this method to restore your parameters from this memory block,
     // whose contents will have been created by the getStateInformation() call.
+}
+
+juce::AudioProcessorValueTreeState::ParameterLayout BasicOscillatorAudioProcessor::createParameterLayout()
+{
+    juce::AudioProcessorValueTreeState::ParameterLayout layout;
+
+    layout.add(std::make_unique<juce::AudioParameterBool>("InSync", "InSync", true)); //In Sync with BPM
+
+
+    juce::StringArray stringArray2;
+    stringArray2.add("2");
+    stringArray2.add("1");
+    stringArray2.add("1/2");
+    stringArray2.add("1/4");
+    stringArray2.add("1/8");
+    stringArray2.add("1/16");
+    stringArray2.add("1/32");
+
+
+    layout.add(std::make_unique<juce::AudioParameterChoice>("NoteVal", "NoteVal", stringArray2, 0)); //BPM
+
+    
+    juce::StringArray stringArray3;
+    stringArray3.add("Straight");
+    stringArray3.add("Dotted");
+    stringArray3.add("Triplet");
+
+
+    layout.add(std::make_unique<juce::AudioParameterChoice>("Feel", "Feel", stringArray3, 0)); //BPM
+    
+
+
+    juce::StringArray stringArray;
+    stringArray.add("Sine");
+    stringArray.add("Square");
+    stringArray.add("Triangle");
+    stringArray.add("SawTooth");
+
+
+    layout.add(std::make_unique<juce::AudioParameterChoice>("OscShape", "OscShape", stringArray, 0)); //Shape of Wave
+
+
+
+    layout.add(std::make_unique<juce::AudioParameterFloat>("rate", "Rate", 0.1f, 10.0f, 5.0f));  // Rate: min 0.1Hz, max 10Hz, default 5Hz
+    layout.add(std::make_unique<juce::AudioParameterFloat>("depth", "Depth", 0.0f, 1.0f, 0.5f)); // Depth: min 0.0, max 1.0, default 0.5
+
+   
+
+ 
+
+
+    
+
+
+    return layout;
 }
 
 //==============================================================================
