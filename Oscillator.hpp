@@ -44,7 +44,13 @@ public:
  
     OscillatorProcessor() {
       oscillator.setFrequency (440.0f);
+
       oscillator.initialise ([] (float x) { return std::sin (x); });
+
+	  lfo.setFrequency(lfoFrequency);
+
+	  lfo.initialise([](float x) { return std::sin(x); });
+
     }
 
 	void setWaveForm(int wave)
@@ -82,15 +88,24 @@ public:
 	void prepare (const juce::dsp::ProcessSpec& spec) override
 	{
 		oscillator.prepare (spec);
+		lfo.prepare(spec);
 	}
     
 	void setFrequency(float frequency)
 	{
 		oscillator.setFrequency(frequency);
+
 	}
 	
 	void process (juce::dsp::ProcessContextReplacing<float>& context) override 
 	{
+
+		float lfoSample = lfo.processSample(0.0f);
+
+		// Modulate the main oscillator frequency
+		float modulatedFrequency = 440.0f + (lfoSample * modulationDepth);
+		oscillator.setFrequency(modulatedFrequency);
+
         oscillator.process (context);
     }
 	
@@ -101,12 +116,28 @@ public:
 
     void reset() override {
        oscillator.reset();
+	   lfo.reset();
     }
 
 	void setBpm(double tempo)
 	{
 		bpm = tempo;
 	}
+
+	void setLowPassFreq(double freq)
+	{
+		lowPassFreq = freq;
+	}
+
+	void setLfoFrequency(float frequency) {
+		lfoFrequency = frequency;
+		lfo.setFrequency(lfoFrequency);
+	}
+
+	void setModulationDepth(float depth) {
+		modulationDepth = depth;
+	}
+
 
 	
 	float setModulator(/*int func, int wave,*/ int noteVal, int adj, bool sync)
@@ -174,6 +205,15 @@ private:
     juce::dsp::Oscillator<float> oscillator;
 
 	float bpm = 120.0;
+
+	float lowPassFreq;
+
+	juce::dsp::Oscillator<float> lfo; // LFO for modulation
+
+	float lfoFrequency = 1.0f; // Default LFO frequency in Hz
+
+	float modulationDepth = 100.0f; // Depth of frequency modulation
+
 };
 //	float triangleOscillator(float triangleVal, float sampleRate, float freq)
 //	{
@@ -205,3 +245,4 @@ private:
 //
 
 #endif
+
