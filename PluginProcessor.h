@@ -11,6 +11,24 @@
 #include <JuceHeader.h>
 #include "Oscillator.hpp"
 
+
+enum Slope
+{
+    Slope_12,
+    Slope_24,
+    Slope_36,
+    Slope_48
+};
+
+
+struct ChainSettings
+{
+    float highCutFreq{ 0 };
+    int highCutSlope{ Slope::Slope_12 };
+};
+
+ChainSettings getChainSettings(juce::AudioProcessorValueTreeState& apvts);
+
 //==============================================================================
 /**
 */
@@ -57,14 +75,28 @@ public:
     static juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout();
     juce::AudioProcessorValueTreeState apvts{ *this, nullptr, "Parameters", createParameterLayout() };
 
+    OscWaveforms BasicOscillatorAudioProcessor::setOscillatorWaveform(int waveIndex);
+
 private:
    // float rate = 0.5f; //Modulation rate in Hz
    // float depth = 0.5f; //Modulation depth (0.0 to 1.0)
 
-    juce::dsp::Oscillator<float> osc { [](float x) {return std::sin(x); } };
-    OscillatorProcessor myOsc;
+   OscillatorProcessor myOsc;
 
+   OscillatorProcessor myLfo;
 
+   using Filter = juce::dsp::IIR::Filter<float>;
+
+   using CutFilter = juce::dsp::ProcessorChain<Filter, Filter>;
+
+   using MonoChain = juce::dsp::ProcessorChain<CutFilter>;
+
+   MonoChain leftChain, rightChain;
+
+   enum ChainPositions
+   {
+       HighCut
+   };
 
     // return std::sin (x); //Sine Wave
     // return x / MathConstants<float>::pi // Saw Wave
